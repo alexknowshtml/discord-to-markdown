@@ -27,15 +27,31 @@ fi
 
 mkdir -p export state .cache
 
+MAX_RETRIES=5
 total=0
 pass=0
+
+fetch_with_backoff() {
+  local attempt=1
+  while true; do
+    if bash run.sh fetch --commit 2>/dev/null; then
+      return 0
+    fi
+    if [ "$attempt" -ge "$MAX_RETRIES" ]; then
+      echo "Fetch failed after $MAX_RETRIES attempts. Aborting." >&2
+      exit 1
+    fi
+    local wait=$((2 ** attempt))
+    echo "Fetch failed (attempt $attempt/$MAX_RETRIES), retrying in ${wait}s..."
+    sleep "$wait"
+    attempt=$((attempt + 1))
+  done
+}
 
 while true; do
   pass=$((pass + 1))
 
-  DISCORD_BOT_TOKEN="$DISCORD_BOT_TOKEN" \
-  DISCORD_GUILD_ID="$DISCORD_GUILD_ID" \
-  bash run.sh fetch --commit 2>/dev/null
+  fetch_with_backoff
 
   count=$(python3 -c "import json; print(len(json.load(open('.cache/discord-new.json'))))")
 
