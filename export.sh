@@ -4,6 +4,7 @@
 # 150 at a time, advancing cursors after each batch.
 #
 # Usage:
+#   ./export.sh                        (reads from .env)
 #   DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... ./export.sh
 #
 # Output: export/<channel-name>.md — one file per channel, threads as ## sections.
@@ -14,8 +15,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-: "${DISCORD_BOT_TOKEN:?Set DISCORD_BOT_TOKEN before running}"
-: "${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID before running}"
+if [ -f .env ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source .env
+  set +a
+fi
+
+: "${DISCORD_BOT_TOKEN:?Set DISCORD_BOT_TOKEN in .env or environment}"
+: "${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID in .env or environment}"
 
 mkdir -p export state .cache
 
