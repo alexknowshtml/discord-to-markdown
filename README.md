@@ -4,8 +4,7 @@ Export a Discord server's channels and threads to readable markdown files —
 one file per channel, threads as sections, messages in chronological order.
 
 Built on top of [@mattpocock](https://github.com/mattpocock)'s Discord ingest
-adapter ([gist](https://gist.github.com/mattpocock/2898df528f891f9755967be962104c1c)),
-which handles rate-limit-aware fetching and per-stream cursor state.
+adapter, which handles rate-limit-aware fetching and per-stream cursor state.
 
 ## Requirements
 
@@ -80,5 +79,4 @@ as needed until all streams return 0 new messages.
 ## Credits
 
 Fetch layer adapted from [@mattpocock](https://github.com/mattpocock)'s
-[Discord ingest adapter gist](https://gist.github.com/mattpocock/2898df528f891f9755967be962104c1c).
-The export-to-markdown layer and this README were added on top.
+Discord ingest adapter. The export-to-markdown layer and this README were added on top.
