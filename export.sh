@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Export a Discord guild's channels and threads to per-channel markdown files.
 # Pulls messages from startDate (set in src/discord/config.ts) to present,
-# 150 at a time, advancing cursors after each batch.
+# 150 at a time, advancing cursors after each batch. All messages are
+# accumulated across passes and written once at the end, sorted by timestamp,
+# so threads appear inline at their chronological position rather than at bottom.
 #
 # Usage:
 #   ./export.sh                        (reads from .env)
@@ -9,7 +11,7 @@
 #
 # Output: export/<channel-name>.md — one file per channel, threads as ## sections.
 # Re-running resumes from where it left off (cursors in state/discord.json).
-# To start fresh: rm state/discord.json
+# To start fresh: rm state/discord.json export/.all_messages.json
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,6 +28,14 @@ fi
 : "${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID in .env or environment}"
 
 mkdir -p export state .cache
+
+ACCUM="export/.all_messages.json"
+
+# Reset accumulator on a fresh export (no prior cursor state), or if the
+# accumulator was deleted while state still exists (treat as resume).
+if [ ! -f state/discord.json ] || [ ! -f "$ACCUM" ]; then
+  echo "[]" > "$ACCUM"
+fi
 
 MAX_RETRIES=5
 total=0
@@ -56,25 +66,22 @@ while true; do
   count=$(python3 -c "import json; print(len(json.load(open('.cache/discord-new.json'))))")
 
   if [ "$count" -eq 0 ]; then
-    echo "Done. $total messages exported across $((pass - 1)) passes."
-    echo "Output: export/"
-    ls -lh export/*.md 2>/dev/null || true
-    break
-  fi
+    echo "All passes complete ($total messages). Writing channel files..."
 
-  total=$((total + count))
-  echo "Pass $pass: +$count messages (total: $total)"
-
-  python3 << 'PYEOF'
+    python3 << 'PYEOF'
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 Path("export").mkdir(exist_ok=True)
 
-with open(".cache/discord-new.json") as f:
+with open("export/.all_messages.json") as f:
     messages = json.load(f)
 
+# Sort everything chronologically before grouping
+messages.sort(key=lambda m: m["created_at"])
+
+# Group by channel
 by_channel = {}
 for m in messages:
     ch = m["channel_name"]
@@ -82,30 +89,80 @@ for m in messages:
         by_channel[ch] = []
     by_channel[ch].append(m)
 
+def fmt_ts(iso):
+    ts = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return ts.strftime("%b %-d, %Y %-I:%M %p UTC")
+
+def write_message(f, m):
+    ref = m.get("referenced")
+    if ref:
+        preview = ref["content"][:120].replace("\n", " ")
+        f.write(f"> **@{ref['author']}:** {preview}\n\n")
+    f.write(f"**@{m['author']}** — {fmt_ts(m['created_at'])}\n")
+    f.write(f"{m['content']}\n\n")
+
+written = 0
 for channel, msgs in by_channel.items():
+    # Separate main channel messages from thread messages.
+    # Group thread messages by thread name; record each thread's first timestamp
+    # so we can position the thread section inline chronologically.
+    main_msgs = []
+    thread_groups = {}   # thread_name -> [messages]
+    thread_first_ts = {} # thread_name -> first created_at
+
+    for m in msgs:
+        if not m.get("content", "").strip():
+            continue  # skip empty stubs (thread channel objects, not messages)
+        thread = m.get("thread_name")
+        if thread is None:
+            main_msgs.append(m)
+        else:
+            if thread not in thread_groups:
+                thread_groups[thread] = []
+                thread_first_ts[thread] = m["created_at"]
+            thread_groups[thread].append(m)
+
+    # Build an ordered event list: main messages + thread sections,
+    # both sorted by their first timestamp so threads appear inline.
+    output = []
+    for m in main_msgs:
+        output.append((m["created_at"], "message", m))
+    for thread_name, thread_msgs in thread_groups.items():
+        output.append((thread_first_ts[thread_name], "thread", (thread_name, thread_msgs)))
+    output.sort(key=lambda x: x[0])
+
     path = Path(f"export/{channel}.md")
-    if not path.exists():
-        path.write_text(f"# #{channel}\n\n")
+    with open(path, "w") as f:
+        f.write(f"# #{channel}\n\n")
+        for _, event_type, data in output:
+            if event_type == "message":
+                write_message(f, data)
+            else:
+                thread_name, thread_msgs = data
+                f.write(f"\n## Thread: {thread_name}\n\n")
+                for m in thread_msgs:
+                    write_message(f, m)
+    written += 1
 
-    with open(path, "a") as f:
-        current_thread = "__unset__"
-        for m in msgs:
-            thread = m.get("thread_name")
-            if thread != current_thread:
-                current_thread = thread
-                if thread:
-                    f.write(f"\n## Thread: {thread}\n\n")
-
-            ts = datetime.fromisoformat(m["created_at"].replace("Z", "+00:00"))
-            ts_str = ts.strftime("%b %-d, %Y %-I:%M %p UTC")
-
-            ref = m.get("referenced")
-            if ref:
-                preview = ref["content"][:120].replace("\n", " ")
-                f.write(f"> **@{ref['author']}:** {preview}\n\n")
-
-            f.write(f"**@{m['author']}** — {ts_str}\n")
-            f.write(f"{m['content']}\n\n")
+print(f"Wrote {written} channel files.")
 PYEOF
+
+    echo "Done. $total messages exported across $((pass - 1)) passes."
+    echo "Output: export/"
+    ls -lh export/*.md 2>/dev/null || true
+    break
+  fi
+
+  # Accumulate new messages into the persistent buffer
+  python3 - << 'PYEOF'
+import json
+new = json.load(open(".cache/discord-new.json"))
+existing = json.load(open("export/.all_messages.json"))
+existing.extend(new)
+json.dump(existing, open("export/.all_messages.json", "w"))
+PYEOF
+
+  total=$((total + count))
+  echo "Pass $pass: +$count messages (total: $total)"
 
 done

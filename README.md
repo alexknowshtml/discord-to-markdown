@@ -28,7 +28,7 @@ server name → Copy Server ID.
 ### 3. Configure the date floor (optional)
 
 Edit `src/discord/config.ts` to set `startDate` — no messages before this date
-will be fetched. Defaults to `2026-06-01`.
+will be fetched. Defaults to `2015-01-01` (covers all of Discord's history).
 
 Add channel names to `denylist` to skip them entirely.
 
@@ -81,7 +81,8 @@ Thread message here
 ## Resuming
 
 Cursor state is saved in `state/discord.json` after each batch. Re-running
-`export.sh` picks up where it left off. To start fresh, delete that file.
+`export.sh` picks up where it left off. To start fresh, delete both
+`state/discord.json` and `export/.all_messages.json`.
 
 ## How it works
 

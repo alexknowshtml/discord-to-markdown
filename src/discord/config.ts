@@ -26,7 +26,7 @@ export type DiscordConfig = {
 };
 
 export const discordConfig: DiscordConfig = {
-  startDate: "2026-06-01",
+  startDate: "2015-01-01",
   denylist: [],
   target: 150,
 };
