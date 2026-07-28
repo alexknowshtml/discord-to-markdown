@@ -94,6 +94,13 @@ automatically based on the bot's permissions.
 Fetches up to 150 messages per pass. A full server export runs as many passes
 as needed until all streams return 0 new messages.
 
+All messages are accumulated in `export/.all_messages.json` across every pass.
+When the export finishes, they're sorted by timestamp and written to channel
+files in a single pass. This ensures threads appear inline at their
+chronological position rather than at the bottom of each file (the adapter
+drains top-level channel streams before thread streams, so a per-batch write
+would misorder them).
+
 ## Credits
 
 Fetch layer adapted from [@mattpocock](https://github.com/mattpocock)'s
