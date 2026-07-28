@@ -1,0 +1,8 @@
+{
+  "name": "discord-to-markdown",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "commander": "^13.0.0"
+  }
+}
