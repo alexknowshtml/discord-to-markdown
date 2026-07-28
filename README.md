@@ -32,11 +32,22 @@ will be fetched. Defaults to `2026-06-01`.
 
 Add channel names to `denylist` to skip them entirely.
 
-### 4. Run the export
+### 4. Configure credentials
 
 ```bash
-export DISCORD_BOT_TOKEN=your-token-here
-export DISCORD_GUILD_ID=your-guild-id-here
+cp .env.example .env
+```
+
+Edit `.env` and fill in your values:
+
+```
+DISCORD_BOT_TOKEN=your-bot-token-here
+DISCORD_GUILD_ID=your-guild-id-here
+```
+
+### 5. Run the export
+
+```bash
 ./export.sh
 ```
 
